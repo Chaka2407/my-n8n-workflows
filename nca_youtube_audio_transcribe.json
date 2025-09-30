@@ -94,19 +94,34 @@
       "id": "51f3b3d9-bd20-4a15-9d4d-74b3a2a2b7f9",
       "name": "⬇️ HTTP → NCA /v1/media/download",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 5,
+      "typeVersion": 4.2,
       "position": [
         -400,
         20
       ],
       "parameters": {
-        "authentication": "none",
-        "requestMethod": "POST",
+        "method": "POST",
         "url": "={{$json.api_base}}/v1/media/download",
-        "jsonParameters": true,
+        "authentication": "none",
         "sendHeaders": true,
-        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\",\"Content-Type\":\"application/json\"}",
-        "bodyParametersJson": "={\n  \"url\": \"{{$json.url}}\",\n  \"format\": \"{{$json.format}}\",\n  \"extract_audio\": true,\n  \"prefer_free_formats\": true\n}"
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "={{$json.api_key}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{$json.url}}\",\n  \"format\": \"{{$json.format}}\",\n  \"extract_audio\": true,\n  \"prefer_free_formats\": true\n}",
+        "options": {
+          "timeout": 60000
+        }
       }
     },
     {
@@ -126,19 +141,34 @@
       "id": "f4b3d9c2-9bde-43c1-ae0c-2af6b9b5432a",
       "name": "🗣️ HTTP → NCA /v1/media/transcribe",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 5,
+      "typeVersion": 4.2,
       "position": [
         0,
         20
       ],
       "parameters": {
-        "authentication": "none",
-        "requestMethod": "POST",
+        "method": "POST",
         "url": "={{$json.api_base}}/v1/media/transcribe",
-        "jsonParameters": true,
+        "authentication": "none",
         "sendHeaders": true,
-        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\",\"Content-Type\":\"application/json\"}",
-        "bodyParametersJson": "={\n  \"media_url\": \"{{$json.audio_url}}\",\n  \"output_format\": \"json\",\n  \"timestamps\": true,\n  \"diarize\": false\n}"
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "={{$json.api_key}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"media_url\": \"{{$json.audio_url}}\",\n  \"output_format\": \"json\",\n  \"timestamps\": true,\n  \"diarize\": false\n}",
+        "options": {
+          "timeout": 60000
+        }
       }
     },
     {
@@ -273,20 +303,36 @@
       "id": "c7d8e9f0-a1b2-4c3d-9e0f-1a2b3c4d5e6f",
       "name": "📡 HTTP → Job Status",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 5,
+      "typeVersion": 4.2,
       "position": [
         1440,
         -120
       ],
       "parameters": {
-        "authentication": "none",
-        "requestMethod": "GET",
+        "method": "GET",
         "url": "={{$json.api_base}}/v1/toolkit/job/status",
-        "jsonParameters": true,
-        "sendQuery": true,
+        "authentication": "none",
         "sendHeaders": true,
-        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\"}",
-        "queryParametersJson": "={\"job_id\":\"{{$json.job_id}}\"}"
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "={{$json.api_key}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "job_id",
+              "value": "={{$json.job_id}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
       }
     },
     {
