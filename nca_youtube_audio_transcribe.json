@@ -27,15 +27,6 @@
         "method": "POST",
         "url": "={{ ($env.NCA_API_BASE || 'http://host.docker.internal:8080') + '/v1/' + 'media/download' }}",
         "authentication": "genericCredentialType",
-        "sendHeaders": true,
-        "headerParametersUi": {
-          "parameter": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"url\": \"{{$json.url}}\",\n  \"format\": \"{{$json.format}}\",\n  \"extract_audio\": true,\n  \"prefer_free_formats\": true\n}",
@@ -76,15 +67,6 @@
         "method": "POST",
         "url": "={{ ($env.NCA_API_BASE || 'http://host.docker.internal:8080') + '/v1/' + 'media/transcribe' }}",
         "authentication": "genericCredentialType",
-        "sendHeaders": true,
-        "headerParametersUi": {
-          "parameter": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"media_url\": \"{{$json.audio_url}}\",\n  \"output_format\": \"json\",\n  \"timestamps\": true,\n  \"diarize\": false\n}",
@@ -516,13 +498,14 @@
         "formDescription": "Submit a YouTube URL to download audio, transcribe, and optionally create subtitles.",
         "respondWithJson": true,
         "formFields": {
-          "formField": [
+          "values": [
             {
               "fieldLabel": "YouTube URL",
               "fieldType": "string",
               "requiredField": true,
               "defaultValue": "",
-              "fieldName": "youtube_url"
+              "fieldName": "youtube_url",
+              "options": {}
             }
           ]
         }
