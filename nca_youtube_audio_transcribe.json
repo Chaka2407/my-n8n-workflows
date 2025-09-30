@@ -442,12 +442,6 @@
         "options": {
           "parentId": ""
         }
-      },
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "",
-          "name": ""
-        }
       }
     },
     {
@@ -464,12 +458,6 @@
         "binaryPropertyName": "srt",
         "options": {
           "parentId": ""
-        }
-      },
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "",
-          "name": ""
         }
       }
     },
@@ -872,5 +860,13 @@
     "errorWorkflow": "",
     "timezone": "America/Toronto"
   },
-  "staticData": null
+  "staticData": null,
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": [],
+  "versionId": "6132d247-73a4-442d-b60a-84e7aa1676bb",
+  "id": null
 }
