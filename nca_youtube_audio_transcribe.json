@@ -1,0 +1,876 @@
+{
+  "name": "NCA YouTube → Audio → Transcribe (+ optional SRT)",
+  "nodes": [
+    {
+      "id": "b4c7c3a2-bb3b-4a63-9c0d-7f8a1f33f5f1",
+      "name": "🔔 Webhook Trigger (POST JSON: { url })",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1220,
+        -80
+      ],
+      "parameters": {
+        "path": "nca-transcribe",
+        "options": {
+          "responseData": "allEntries",
+          "responseCode": 200,
+          "responseMode": "onReceived",
+          "responseDataType": "json"
+        }
+      }
+    },
+    {
+      "id": "5a4f1f8f-1a3e-4a1e-b9b4-1e2b0a91a3e7",
+      "name": "🖐️ Manual Trigger (Testing)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1220,
+        120
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3c4b2e91-7d8d-4f92-9a41-1b9b7e55a2c3",
+      "name": "🔀 Merge Triggers (Either)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        20
+      ],
+      "parameters": {
+        "mode": "passThrough",
+        "output": "input1"
+      }
+    },
+    {
+      "id": "2dfb55a1-fd6a-4b95-9a6a-3de0f1a0f0b2",
+      "name": "⚙️ Set Config (api_base, api_key, format)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        20
+      ],
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "api_base",
+              "value": "={{$env.NCA_API_BASE || 'http://host.docker.internal:8080'}}"
+            },
+            {
+              "name": "api_key",
+              "value": "={{$env.NCA_API_KEY || ''}}"
+            },
+            {
+              "name": "format",
+              "value": "m4a"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": true
+        }
+      }
+    },
+    {
+      "id": "b8f4fe7f-1b8a-4f9a-8a67-2bb7b3a6c0d1",
+      "name": "🔎 Resolve YouTube URL",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        20
+      ],
+      "parameters": {
+        "functionCode": "const urlFromWebhook = $json?.body?.url;\nconst urlFromTopLevel = $json?.url;\nconst fallback = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';\nreturn [{\n  json: {\n    ...$json,\n    url: urlFromWebhook || urlFromTopLevel || fallback,\n  },\n}];"
+      }
+    },
+    {
+      "id": "51f3b3d9-bd20-4a15-9d4d-74b3a2a2b7f9",
+      "name": "⬇️ HTTP → NCA /v1/media/download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 5,
+      "position": [
+        -400,
+        20
+      ],
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "={{$json.api_base}}/v1/media/download",
+        "jsonParameters": true,
+        "sendHeaders": true,
+        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\",\"Content-Type\":\"application/json\"}",
+        "bodyParametersJson": "={\n  \"url\": \"{{$json.url}}\",\n  \"format\": \"{{$json.format}}\",\n  \"extract_audio\": true,\n  \"prefer_free_formats\": true\n}"
+      }
+    },
+    {
+      "id": "d2c9b0e7-7a42-4e45-96e2-8f1d2f7b6b10",
+      "name": "🧽 Normalize Download Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        20
+      ],
+      "parameters": {
+        "functionCode": "const r = $json;\nconst audioUrl = r.audio_url ?? r.url ?? r.output_url ?? r.media_url ?? r.response?.url ?? r.response?.media_url;\nif (!audioUrl) {\n  throw new Error('Download response missing audio URL.');\n}\nreturn [{\n  json: {\n    ...$json,\n    audio_url: audioUrl,\n  },\n}];"
+      }
+    },
+    {
+      "id": "f4b3d9c2-9bde-43c1-ae0c-2af6b9b5432a",
+      "name": "🗣️ HTTP → NCA /v1/media/transcribe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 5,
+      "position": [
+        0,
+        20
+      ],
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "={{$json.api_base}}/v1/media/transcribe",
+        "jsonParameters": true,
+        "sendHeaders": true,
+        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\",\"Content-Type\":\"application/json\"}",
+        "bodyParametersJson": "={\n  \"media_url\": \"{{$json.audio_url}}\",\n  \"output_format\": \"json\",\n  \"timestamps\": true,\n  \"diarize\": false\n}"
+      }
+    },
+    {
+      "id": "e7b3f6a8-1d67-4c7e-8a7a-4f9a9a2b7e6f",
+      "name": "🧽 Normalize Transcribe Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        200,
+        20
+      ],
+      "parameters": {
+        "functionCode": "const r = $json;\nconst out = {\n  ...$json,\n  job_id: r.job_id ?? r.response?.job_id ?? null,\n  status: r.status ?? r.response?.status ?? null,\n  transcript: r.transcript ?? r.response?.transcript ?? null,\n  segments: r.segments ?? r.response?.segments ?? null,\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "a3e4b5c6-d7e8-49f1-92a3-1b2c3d4e5f60",
+      "name": "❓ IF: Async (job_id exists)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        420,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.job_id}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1c2d3e4f-5a6b-47c8-9d0e-2f3a4b5c6d7e",
+      "name": "➡️ Sync Path → Normalize Transcript",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        640,
+        160
+      ],
+      "parameters": {
+        "functionCode": "const r = $json;\nlet segments = [];\nif (Array.isArray(r.segments)) {\n  segments = r.segments;\n} else if (r.transcript && Array.isArray(r.transcript.segments)) {\n  segments = r.transcript.segments;\n} else if (typeof r.transcript === 'string') {\n  segments = [{ start: 0, end: 0, text: r.transcript }];\n}\nreturn [{\n  json: {\n    ...$json,\n    segments,\n  },\n}];"
+      }
+    },
+    {
+      "id": "0d2c6f2a-9b1e-4d5c-8a0e-9c6b5d4f3a2b",
+      "name": "🧭 Poll Settings + Job Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -120
+      ],
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "number": [
+            {
+              "name": "maxPolls",
+              "value": 15
+            },
+            {
+              "name": "pollDelaySeconds",
+              "value": 12
+            }
+          ],
+          "string": [
+            {
+              "name": "job_id",
+              "value": "={{$json.job_id}}"
+            },
+            {
+              "name": "api_base",
+              "value": "={{$json.api_base}}"
+            },
+            {
+              "name": "api_key",
+              "value": "={{$json.api_key}}"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": true
+        }
+      }
+    },
+    {
+      "id": "f1a2b3c4-d5e6-4f78-91a2-b3c4d5e6f7a8",
+      "name": "📦 Build Poll Items (maxPolls)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        840,
+        -120
+      ],
+      "parameters": {
+        "functionCode": "const max = $json.maxPolls || 15;\nreturn Array.from({ length: max }, (_, index) => ({\n  json: {\n    ...$json,\n    pollAttempt: index + 1,\n  },\n  pairedItem: 0,\n}));"
+      }
+    },
+    {
+      "id": "9a8b7c6d-5e4f-43a2-9b1c-7d6e5f4a3b2c",
+      "name": "🔁 Split In Batches (Loop)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -120
+      ],
+      "parameters": {
+        "batchSize": 1
+      }
+    },
+    {
+      "id": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "⏳ Wait (pollDelaySeconds)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        -120
+      ],
+      "parameters": {
+        "amount": "={{$json.pollDelaySeconds}}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "c7d8e9f0-a1b2-4c3d-9e0f-1a2b3c4d5e6f",
+      "name": "📡 HTTP → Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 5,
+      "position": [
+        1440,
+        -120
+      ],
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "GET",
+        "url": "={{$json.api_base}}/v1/toolkit/job/status",
+        "jsonParameters": true,
+        "sendQuery": true,
+        "sendHeaders": true,
+        "headerParametersJson": "={\"x-api-key\":\"{{$json.api_key}}\"}",
+        "queryParametersJson": "={\"job_id\":\"{{$json.job_id}}\"}"
+      }
+    },
+    {
+      "id": "e1f2a3b4-c5d6-4789-9abc-d1e2f3a4b5c6",
+      "name": "🧽 Normalize Status Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        -120
+      ],
+      "parameters": {
+        "functionCode": "const r = $json;\nconst status = r.status ?? r.response?.status ?? null;\nconst transcript = r.transcript ?? r.response?.transcript ?? null;\nconst segments = r.segments ?? r.response?.segments ?? null;\nreturn [{\n  json: {\n    ...$json,\n    status,\n    transcript,\n    segments,\n  },\n}];"
+      }
+    },
+    {
+      "id": "ab12cd34-ef56-47a8-9b0c-1d2e3f4a5b6c",
+      "name": "✅ IF: status == completed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.status}}",
+              "operation": "equal",
+              "value2": "completed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3d4c5b6a-7e8f-4a9b-b0c1-d2e3f4a5b6c7",
+      "name": "🏁 Polling Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        -240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7b8c9d0e-1f2a-43b4-85c6-d7e8f9a0b1c2",
+      "name": "🔂 Next Poll",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        -20
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "0a1b2c3d-4e5f-46a7-8b9c-0d1e2f3a4b5c",
+      "name": "➡️ Batches: Next",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -20
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "6c7d8e9f-0a1b-4c2d-9e3f-4a5b6c7d8e9f",
+      "name": "🧽 Normalize Final Transcript",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -240
+      ],
+      "parameters": {
+        "functionCode": "const r = $json;\nlet segments = [];\nif (Array.isArray(r.segments)) {\n  segments = r.segments;\n} else if (r.transcript && Array.isArray(r.transcript.segments)) {\n  segments = r.transcript.segments;\n} else if (typeof r.transcript === 'string') {\n  segments = [{ start: 0, end: 0, text: r.transcript }];\n}\nreturn [{\n  json: {\n    ...$json,\n    segments,\n  },\n}];"
+      }
+    },
+    {
+      "id": "c1d2e3f4-a5b6-47c8-9d0e-1f2a3b4c5d6e",
+      "name": "🧾 Build SRT (Optional)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -160
+      ],
+      "parameters": {
+        "functionCode": "const toSrtTimestamp = (sec = 0) => {\n  const ms = Math.max(0, Math.floor(sec * 1000));\n  const hours = String(Math.floor(ms / 3600000)).padStart(2, '0');\n  const minutes = String(Math.floor((ms % 3600000) / 60000)).padStart(2, '0');\n  const seconds = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');\n  const milliseconds = String(ms % 1000).padStart(3, '0');\n  return `${hours}:${minutes}:${seconds},${milliseconds}`;\n};\n\nconst segments = Array.isArray($json.segments) ? $json.segments : [];\nlet index = 1;\nconst lines = [];\n\nfor (const segment of segments) {\n  const start = typeof segment.start === 'number' ? segment.start : segment.from ?? segment.begin ?? 0;\n  const end = typeof segment.end === 'number' ? segment.end : segment.to ?? segment.finish ?? (start + 2);\n  const text = (segment.text ?? segment.content ?? '').toString().trim();\n  if (!text) continue;\n  lines.push(String(index++));\n  lines.push(`${toSrtTimestamp(start)} --> ${toSrtTimestamp(end)}`);\n  lines.push(text);\n  lines.push('');\n}\n\nreturn [{\n  json: {\n    ...$json,\n    srt: lines.join('\\n'),\n  },\n}];"
+      }
+    },
+    {
+      "id": "8d9e0f1a-2b3c-44d5-96e7-f8a9b0c1d2e3",
+      "name": "📝 Build transcript.json string",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -320
+      ],
+      "parameters": {
+        "functionCode": "const segments = Array.isArray($json.segments) ? $json.segments : [];\nreturn [{\n  json: {\n    ...$json,\n    data: { segments },\n  },\n}];"
+      }
+    },
+    {
+      "id": "7c8d9e0f-1a2b-43c4-85d6-e7f8a9b0c1d2",
+      "name": "🧱 To Binary: transcript.json",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        -320
+      ],
+      "parameters": {
+        "operation": "jsonToBinary",
+        "dataPropertyName": "data",
+        "fileName": "transcript.json"
+      }
+    },
+    {
+      "id": "f2a3b4c5-d6e7-48f9-9a0b-1c2d3e4f5a6b",
+      "name": "🧱 To Binary: subtitles.srt",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        -160
+      ],
+      "parameters": {
+        "operation": "textToBinary",
+        "dataPropertyName": "srt",
+        "fileName": "subtitles.srt"
+      }
+    },
+    {
+      "id": "e3f4a5b6-c7d8-49e0-9f1a-2b3c4d5e6f7a",
+      "name": "📁 Google Drive → Upload transcript.json",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2840,
+        -320
+      ],
+      "parameters": {
+        "operation": "upload",
+        "binaryPropertyName": "data",
+        "options": {
+          "parentId": ""
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "id": "a4b5c6d7-e8f9-4a0b-9c1d-2e3f4a5b6c7d",
+      "name": "📁 Google Drive → Upload subtitles.srt",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2840,
+        -160
+      ],
+      "parameters": {
+        "operation": "upload",
+        "binaryPropertyName": "srt",
+        "options": {
+          "parentId": ""
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "id": "c7a8b9d0-e1f2-43a4-95b6-c7d8e9f0a1b2",
+      "name": "📌 Overview & Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1210,
+        -380
+      ],
+      "parameters": {
+        "content": "## Start Here\nThis workflow accepts a YouTube URL, downloads audio via NCA Toolkit (/v1/media/download), transcribes via /v1/media/transcribe, optionally polls async jobs, and can output transcript.json and subtitles.srt to Google Drive.\n\nTriggers\n- Use Webhook (POST JSON: { \"url\": \"https://...\" }) at path /nca-transcribe\n- Or use Manual Trigger for testing (falls back to a sample URL)\n\nCredentials to configure\n- Google Drive OAuth2 (for uploads)\n- NCA Toolkit API Key (header: x-api-key)\n\nConfig\n- api_base: http://host.docker.internal:8080 (override with env var)\n- api_key: set env var NCA_API_KEY\n- format: m4a (adjust if desired)\n\nDocs\n- NCA Toolkit: https://github.com/stephengpope/no-code-architects-toolkit"
+      },
+      "color": "#FFD166"
+    },
+    {
+      "id": "1a2b3c4d-5e6f-47a8-9b0c-1d2e3f4a5b6d",
+      "name": "🧭 Flow Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        -220
+      ],
+      "parameters": {
+        "content": "## Download → Transcribe Path\n1) Resolve YouTube URL ensures we have a valid url from webhook/manual\n2) /v1/media/download returns an audio URL (normalized in next node)\n3) /v1/media/transcribe may respond sync (transcript ready) or async (job_id)\n4) IF routes to either immediate finish or polling\n\nUse the normalization nodes to adapt to minor API shape differences."
+      },
+      "color": "#06D6A0"
+    },
+    {
+      "id": "9f8e7d6c-5b4a-4392-8a1b-2c3d4e5f6a7b",
+      "name": "🔁 Polling Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -350
+      ],
+      "parameters": {
+        "content": "## Polling Loop\n- Uses Build Poll Items + Split In Batches to iterate\n- Wait honors pollDelaySeconds\n- Job Status checks /v1/toolkit/job/status?job_id=...\n- Exit when status === completed → normalize to segments"
+      },
+      "color": "#118AB2"
+    },
+    {
+      "id": "ab98cd76-5432-4b10-9f87-65a4b3c2d1e0",
+      "name": "📤 Output Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        -420
+      ],
+      "parameters": {
+        "content": "## Outputs\n- transcript.json: normalized segments saved to Drive\n- subtitles.srt: optional SRT built from segments\n\nSet parentId on both Google Drive nodes to a target folder if desired."
+      },
+      "color": "#EF476F"
+    },
+    {
+      "id": "0b1c2d3e-4f5a-46b7-8c9d-0e1f2a3b4c5d",
+      "name": "🔒 Security Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        320
+      ],
+      "parameters": {
+        "content": "## Security\n- API key is injected via header x-api-key\n- Prefer n8n credentials or environment variables for secrets\n- Validate incoming webhook payloads (schema and source)"
+      },
+      "color": "#FFD700"
+    }
+  ],
+  "connections": {
+    "🔔 Webhook Trigger (POST JSON: { url })": {
+      "main": [
+        [
+          {
+            "node": "🔀 Merge Triggers (Either)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🖐️ Manual Trigger (Testing)": {
+      "main": [
+        [
+          {
+            "node": "🔀 Merge Triggers (Either)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔀 Merge Triggers (Either)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Set Config (api_base, api_key, format)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Set Config (api_base, api_key, format)": {
+      "main": [
+        [
+          {
+            "node": "🔎 Resolve YouTube URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 Resolve YouTube URL": {
+      "main": [
+        [
+          {
+            "node": "⬇️ HTTP → NCA /v1/media/download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⬇️ HTTP → NCA /v1/media/download": {
+      "main": [
+        [
+          {
+            "node": "🧽 Normalize Download Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧽 Normalize Download Response": {
+      "main": [
+        [
+          {
+            "node": "🗣️ HTTP → NCA /v1/media/transcribe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗣️ HTTP → NCA /v1/media/transcribe": {
+      "main": [
+        [
+          {
+            "node": "🧽 Normalize Transcribe Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧽 Normalize Transcribe Response": {
+      "main": [
+        [
+          {
+            "node": "❓ IF: Async (job_id exists)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "❓ IF: Async (job_id exists)?": {
+      "main": [
+        [
+          {
+            "node": "🧭 Poll Settings + Job Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "➡️ Sync Path → Normalize Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧭 Poll Settings + Job Context": {
+      "main": [
+        [
+          {
+            "node": "📦 Build Poll Items (maxPolls)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Build Poll Items (maxPolls)": {
+      "main": [
+        [
+          {
+            "node": "🔁 Split In Batches (Loop)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔁 Split In Batches (Loop)": {
+      "main": [
+        [
+          {
+            "node": "⏳ Wait (pollDelaySeconds)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "➡️ Batches: Next",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Wait (pollDelaySeconds)": {
+      "main": [
+        [
+          {
+            "node": "📡 HTTP → Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📡 HTTP → Job Status": {
+      "main": [
+        [
+          {
+            "node": "🧽 Normalize Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧽 Normalize Status Response": {
+      "main": [
+        [
+          {
+            "node": "✅ IF: status == completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ IF: status == completed": {
+      "main": [
+        [
+          {
+            "node": "🏁 Polling Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔂 Next Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔂 Next Poll": {
+      "main": [
+        [
+          {
+            "node": "➡️ Batches: Next",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🏁 Polling Complete": {
+      "main": [
+        [
+          {
+            "node": "🧽 Normalize Final Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧽 Normalize Final Transcript": {
+      "main": [
+        [
+          {
+            "node": "📝 Build transcript.json string",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🧾 Build SRT (Optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "➡️ Sync Path → Normalize Transcript": {
+      "main": [
+        [
+          {
+            "node": "📝 Build transcript.json string",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🧾 Build SRT (Optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Build transcript.json string": {
+      "main": [
+        [
+          {
+            "node": "🧱 To Binary: transcript.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧱 To Binary: transcript.json": {
+      "main": [
+        [
+          {
+            "node": "📁 Google Drive → Upload transcript.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧾 Build SRT (Optional)": {
+      "main": [
+        [
+          {
+            "node": "🧱 To Binary: subtitles.srt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧱 To Binary: subtitles.srt": {
+      "main": [
+        [
+          {
+            "node": "📁 Google Drive → Upload subtitles.srt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "➡️ Batches: Next": {
+      "main": [
+        [
+          {
+            "node": "🔁 Split In Batches (Loop)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "errorWorkflow": "",
+    "timezone": "America/Toronto"
+  },
+  "staticData": null
+}
